@@ -1,0 +1,4 @@
+interface:
+  display_name: "HW Explain"
+  short_description: "코드 변경을 인터랙티브 HTML로 깊이 있게 해설"
+  default_prompt: "Use $explain-diff-html to create an interactive HTML explanation of this code change."

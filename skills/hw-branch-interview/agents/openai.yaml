@@ -1,0 +1,4 @@
+interface:
+  display_name: "HW Branch Interview"
+  short_description: "브랜치 이해를 위한 구조화 질문 스킬입니다."
+  default_prompt: "Use $hw-branch-interview to inspect this branch, ask me structured questions from basics to edge cases, and build a confirmed branch understanding brief."

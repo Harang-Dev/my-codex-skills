@@ -1,0 +1,4 @@
+interface:
+  display_name: "HW SEO"
+  short_description: "Audit and improve AlphaSquare web SEO safely."
+  default_prompt: "Use $hw-seo to audit or improve SEO in this repository."

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SKILLS_DIR="$SOURCE_DIR/skills"
+TARGET_DIR="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
+
+log() {
+  printf '[my-codex-skills] %s\n' "$1"
+}
+
+is_valid_skill_name() {
+  local skill_name="$1"
+
+  [[ -n "$skill_name" ]] \
+    && [[ "$skill_name" != '.' ]] \
+    && [[ "$skill_name" != '..' ]] \
+    && [[ "$skill_name" != *'/'* ]] \
+    && [[ "$skill_name" != *'\\'* ]]
+}
+
+install_skill() {
+  local skill_name="$1"
+  local skill_dir="$SKILLS_DIR/$skill_name"
+  local target="$TARGET_DIR/$skill_name"
+  local temporary_target="$TARGET_DIR/.${skill_name}.tmp.$$"
+
+  if ! is_valid_skill_name "$skill_name"; then
+    log "skip $skill_name: invalid skill name"
+    return 1
+  fi
+
+  if [[ ! -f "$skill_dir/SKILL.md" ]]; then
+    log "skip $skill_name: SKILL.md is missing"
+    return 1
+  fi
+
+  if [[ -e "$target" && ! -L "$target" ]]; then
+    log "skip $skill_name: $target is an existing directory or file"
+    return 1
+  fi
+
+  if [[ -L "$target" && "$(readlink "$target")" != "$skill_dir" ]]; then
+    log "skip $skill_name: $target is managed by another location"
+    return 1
+  fi
+
+  ln -s "$skill_dir" "$temporary_target"
+
+  if [[ -L "$target" ]]; then
+    unlink "$target"
+  fi
+
+  mv -f "$temporary_target" "$target"
+  log "installed $skill_name"
+}
+
+main() {
+  local skill_name
+
+  if [[ ! -d "$SKILLS_DIR" ]]; then
+    log "no skills directory: $SKILLS_DIR"
+    exit 1
+  fi
+
+  mkdir -p "$TARGET_DIR"
+
+  if [[ "$#" -gt 0 ]]; then
+    for skill_name in "$@"; do
+      install_skill "$skill_name"
+    done
+    return
+  fi
+
+  for skill_name in "$SKILLS_DIR"/*; do
+    [[ -d "$skill_name" ]] || continue
+    install_skill "$(basename "$skill_name")"
+  done
+}
+
+main "$@"

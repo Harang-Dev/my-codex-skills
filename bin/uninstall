@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET_DIR="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
+
+is_valid_skill_name() {
+  local skill_name="$1"
+
+  [[ -n "$skill_name" ]] \
+    && [[ "$skill_name" != '.' ]] \
+    && [[ "$skill_name" != '..' ]] \
+    && [[ "$skill_name" != *'/'* ]] \
+    && [[ "$skill_name" != *'\\'* ]]
+}
+
+if [[ "$#" -eq 0 ]]; then
+  printf 'Usage: %s <skill-name>...\n' "$0" >&2
+  exit 1
+fi
+
+for skill_name in "$@"; do
+  if ! is_valid_skill_name "$skill_name"; then
+    printf '[my-codex-skills] skip %s: invalid skill name\n' "$skill_name"
+    continue
+  fi
+
+  target="$TARGET_DIR/$skill_name"
+
+  if [[ ! -L "$target" ]]; then
+    printf '[my-codex-skills] skip %s: not a symbolic link\n' "$skill_name"
+    continue
+  fi
+
+  if [[ "$(readlink "$target")" != "$SOURCE_DIR/skills/$skill_name" ]]; then
+    printf '[my-codex-skills] skip %s: link is not managed by this repository\n' "$skill_name"
+    continue
+  fi
+
+  rm "$target"
+  printf '[my-codex-skills] uninstalled %s\n' "$skill_name"
+done

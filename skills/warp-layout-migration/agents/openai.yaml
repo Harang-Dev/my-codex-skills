@@ -1,0 +1,4 @@
+interface:
+  display_name: "Warp Layout Migration"
+  short_description: "AlphaSquare 워프를 GlobalWarps 패턴으로 마이그레이션"
+  default_prompt: "Use $warp-layout-migration to migrate AlphaSquare legacy Modal, ActionSheet, SlideLayout, or approved slide-wrapper usage to the GlobalWarps pattern with concrete WarpSymbol ownership."

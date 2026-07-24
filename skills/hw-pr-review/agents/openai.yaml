@@ -1,0 +1,4 @@
+interface:
+  display_name: "HW PR Review"
+  short_description: "PR 리뷰를 하는 스킬입니다."
+  default_prompt: "Use $hw-pr-review to inspect the current local or branch diff, apply recurring reviewer feedback patterns, and report required fixes for human PR review."

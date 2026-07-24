@@ -1,0 +1,4 @@
+interface:
+  display_name: "Interview"
+  short_description: "작업 전 한번의 질문으로 명확한 기준을 세우는 스킬입니다."
+  default_prompt: "Use $interview to clarify my request before planning or implementation."
