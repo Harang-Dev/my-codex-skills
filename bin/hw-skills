@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+print_usage() {
+  cat <<'EOF'
+Usage: hw-skills <command> [skill-name...]
+
+Commands:
+  install [names...]  Link all or selected skills into Codex
+  update [names...]   Fast-forward the repository and refresh links
+  list                Show every managed skill and its local link status
+  remove <names...>   Remove links managed by this repository
+  doctor              Validate the repository and local skill links
+  version             Print the managed skills version
+EOF
+}
+
+read_version() {
+  sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$SOURCE_DIR/manifest.json"
+}
+
+list_skills() {
+  local skill_dir skill_name target status
+
+  printf 'my-codex-skills %s\n' "$(read_version)"
+
+  for skill_dir in "$SOURCE_DIR/skills"/*; do
+    [[ -d "$skill_dir" ]] || continue
+    skill_name="$(basename "$skill_dir")"
+    target="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}/$skill_name"
+    status='not installed'
+
+    if [[ -L "$target" && "$(readlink "$target")" == "$skill_dir" ]]; then
+      status='installed'
+    elif [[ -e "$target" || -L "$target" ]]; then
+      status='conflict'
+    fi
+
+    printf '%-28s %s\n' "$skill_name" "$status"
+  done
+}
+
+run_doctor() {
+  "$SOURCE_DIR/scripts/validate-skills.sh"
+
+  if [[ ! -d "$SOURCE_DIR/.git" ]]; then
+    printf '[my-codex-skills] warning: source is not a Git checkout\n'
+    return
+  fi
+
+  if ! git -C "$SOURCE_DIR" diff --quiet || ! git -C "$SOURCE_DIR" diff --cached --quiet; then
+    printf '[my-codex-skills] warning: working tree has uncommitted changes\n'
+  fi
+
+  list_skills
+}
+
+main() {
+  local command="${1:-help}"
+
+  case "$command" in
+    install)
+      shift
+      exec "$SOURCE_DIR/bin/install" "$@"
+      ;;
+    update)
+      shift
+      exec "$SOURCE_DIR/bin/update" "$@"
+      ;;
+    list)
+      list_skills
+      ;;
+    remove|uninstall)
+      shift
+      exec "$SOURCE_DIR/bin/uninstall" "$@"
+      ;;
+    doctor)
+      run_doctor
+      ;;
+    version)
+      read_version
+      ;;
+    help|--help|-h)
+      print_usage
+      ;;
+    *)
+      printf 'Unknown command: %s\n\n' "$command" >&2
+      print_usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
