@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "skills": {
+    "doc": { "path": "skills/doc" },
+    "explain-diff-html": { "path": "skills/explain-diff-html" },
+    "figma": { "path": "skills/figma" },
+    "hw-branch-interview": { "path": "skills/hw-branch-interview" },
+    "hw-pr-review": { "path": "skills/hw-pr-review" },
+    "hw-resolve-comment": { "path": "skills/hw-resolve-comment" },
+    "hw-seo": { "path": "skills/hw-seo" },
+    "hw-write-pr": { "path": "skills/hw-write-pr" },
+    "hw.architecture-docs": { "path": "skills/hw.architecture-docs" },
+    "interview": { "path": "skills/interview" },
+    "warp-layout-migration": { "path": "skills/warp-layout-migration" }
+  }
+}
