@@ -6,7 +6,7 @@ SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 print_usage() {
   cat <<'EOF'
-Usage: skills <command> [skill-name...]
+Usage: hw-skills <command> [skill-name...]
 
 Commands:
   install [names...]  Link all or selected skills into Codex
