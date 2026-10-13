@@ -1,0 +1,4 @@
+interface:
+  display_name: "HW Work Log"
+  short_description: "Save reusable work lessons to Notion in a fixed Korean format"
+  default_prompt: "Use $hw-work-log to save reusable lessons from this chat to Notion using the fixed Korean template."
