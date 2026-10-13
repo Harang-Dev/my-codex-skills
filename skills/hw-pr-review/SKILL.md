@@ -1,401 +1,251 @@
 ---
 name: hw-pr-review
-description: Run a PR-readiness self-review on local or branch changes for human review or final readiness. Use when Codex has implemented or refactored code and needs to catch avoidable reviewer feedback, especially issues around repository conventions, ownership boundaries, component API contracts, state/lifecycle edge cases, UI/layout code paths, naming, minimality, PR-body drift, and validation claims.
+description: Perform an evidence-first, read-only PR-readiness review of local working-tree changes, a branch diff, or an existing pull request. Use after implementation or refactoring, or whenever the user asks to review a diff, branch, or PR for correctness, regressions, test adequacy, contract/API compatibility, ownership, minimality, lifecycle, data, security, repository conventions, CI/review context, and PR-body drift. Do not use as a fix-or-publish workflow unless the user or invoking workflow explicitly authorizes edits.
 ---
 
 # HW PR Review
 
-## Purpose
+## Goal
 
-Use this skill as a PR-readiness review pass. The goal is to catch issues that are not necessarily test failures: over-defensive code, thin wrappers, ambiguous names, stale comments, duplicated fallback paths, unclear ownership, and mismatches between implementation and PR explanation.
+Find concrete issues that a careful human reviewer would want fixed before approval. Review behavior and contracts, not just lint and tests. Prefer a small set of well-supported findings over a long speculative checklist.
 
-This skill applies to new work and to changed work. Do not reserve it only for refactors or review-comment followups.
+## Operating Contract
 
-## Operating Rules
-
-- Treat the current diff as if a skeptical reviewer will read it line by line.
-- If the work is attached to an existing pull request or remote review, treat existing PR body, unresolved review threads, general comments, and CI/check state as first-class review inputs. Do not start from the local diff alone when reviewer context is available.
-- Prefer minimal correct code over defensive code that duplicates responsibilities.
-- Separate behavior preservation from implementation convenience.
-- For every materially changed element with callers or consumers, review its public surface and call sites before reading its implementation. Preserve the consumer-first model long enough to compare it with the actual behavior; do not rationalize an awkward contract with implementation knowledge.
-- Do not commit while using this skill unless the user explicitly asks.
-- Passing validation never proves minimality, ownership, or scope correctness.
-- If changes are needed, edit locally, run the relevant checks, and show the diff before commit or push.
-- If you edit during review, still report the original finding that caused the edit; do not hide it by saying there were no findings.
-- If no changes are needed, say that explicitly and list residual risks.
+- Default to review-only mode. Read, search, and run non-writing checks; do not edit, stage, commit, push, post comments, or resolve threads.
+- Enter fix mode only when the user explicitly requests fixes or an enclosing implementation workflow explicitly authorizes edits. Preserve the original findings, show the resulting diff, and never commit or publish unless separately authorized.
+- Review issues introduced or materially worsened by the target change. Include a pre-existing issue only when the change makes it newly reachable or directly relevant; label it clearly.
+- Require evidence and an actionable scenario for every finding. Do not report a preference merely because another design is possible.
+- Treat passing checks as evidence, not proof of correctness, scope, ownership, minimality, or test adequacy.
+- Keep unrelated dirty files untouched and outside the verdict.
 
 ## Workflow
 
-### 1. Establish The Review Surface
+### 1. Preflight
 
-Inspect the local diff and changed files:
+1. Resolve the repository root, current branch, requested target, and mode.
+2. Read the authoritative instructions that apply to the changed files before inferring conventions from nearby code:
+   - every applicable `AGENTS.md`
+   - `CONTRIBUTING.md` and `CODEOWNERS`
+   - package or feature README/architecture guides
+   - package scripts and lint, test, build, and type-check configuration
+3. Resolve the comparison base in this order:
+   - the user-specified base or revision
+   - the existing PR's actual base ref and head SHA
+   - a repository-configured integration branch and its merge base; the feature branch's own tracking ref is not automatically its review base
+   - the repository default branch as a final fallback
+4. When a PR exists, read its title, body, latest reviews, unresolved inline threads, general comments, and failing or pending checks. If any context is unavailable, record that limitation.
+5. Reconstruct the review contract from the latest user request, linked requirements, existing behavior, PR context, and repository rules:
+   - final intended behavior and behavior that must remain unchanged
+   - in-scope and explicitly out-of-scope work
+   - affected users, packages, APIs, and data
+   - unacceptable regressions
+   - validation already performed and remaining unknowns
+6. Separate known reviewer feedback from new findings. Do not present an existing comment as an independent discovery.
+7. When the repository is AlphaSquare, read [references/alphasquare-risks.md](references/alphasquare-risks.md) and apply only the sections touched by the diff.
 
-```bash
-git status --short
-git diff --stat
-git diff
-```
+### 2. Establish the Exact Review Surface
 
-If the work is already committed on the branch, also inspect the branch diff against the default branch:
+Define the target before reading implementation bodies:
 
-```bash
-base="$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null || echo origin/main)"
-git diff --stat "$base"...HEAD
-git diff "$base"...HEAD
-```
+- **Workspace readiness:** compare the actual merge base with `HEAD`, then include staged, unstaged, and untracked layers.
+- **Branch snapshot:** compare the actual merge base with the requested branch head; report local pending layers separately unless the user includes them.
+- **PR snapshot:** compare the PR base with the PR head SHA. Do not mix unpushed local changes into the PR verdict, and report whether local `HEAD` matches the PR head.
+- **Staged-only:** use only when the user explicitly requests it; still report excluded unstaged and untracked layers.
 
-If there are unrelated dirty files, identify them and ignore them unless they directly affect the current work.
+Mark any fallback base as inferred rather than authoritative.
 
-### 2. Reconstruct The Contract
+Resolve base and head refs to immutable SHAs before reading diffs. Read implementation, consumers, and instructions from the reviewed snapshot, not a different checkout. For workspace/staged reviews, retain the selected diff and included untracked contents or their fingerprints so later edits can be detected; status and filenames alone cannot establish an unchanged snapshot. Keep scratch artifacts outside the target worktree.
 
-Write down the work contract in concrete terms before reviewing code:
-
-- What user-visible behavior must be preserved?
-- What behavior was added or changed?
-- What code areas are intentionally out of scope?
-- What regressions would be unacceptable?
-- What validation has actually run, and what remains unverified?
-
-Use the user's latest requirements, task/goals docs, PR body, and review comments when available.
-
-If reviewing an existing PR or remote branch that likely has a PR:
-
-- Resolve the PR number or URL from the branch, local git metadata, or GitHub tooling.
-- Read the PR title/body, unresolved review threads, non-resolved inline comments, general comments, latest review states, and failing/pending checks before finalizing the review contract.
-- Separate already-known reviewer feedback from new findings. Do not repeat existing comments as if newly discovered unless the user asked for a consolidated review; instead, say whether each known issue is still valid.
-- If PR context cannot be fetched, state that limitation and continue from the local diff with that residual risk.
-
-Classify the changed responsibilities before deep review. A single PR may have multiple categories:
-
-- Runtime behavior: user flows, UI state, service/cache behavior, async side effects, validation, permissions, feature flags.
-- API or type contract: exported types, props/emits/slots, composable return shapes, event names, route/query formats, request/response payloads.
-- Persisted or external data contract: localStorage/sessionStorage, IndexedDB, cookies, cache keys, server data, fixtures, mocks, saved settings, serialized objects, import/export formats.
-- Shared surface: modules, shared components, constants/config, global registration, base classes, generated types, design-system primitives.
-- Mechanical migration: broad renames, codemods, key/path migrations, file moves, dependency swaps, formatting-only changes.
-- Policy or documentation: architecture rules, coding conventions, migration guides, public examples, test strategy, operational runbooks.
-
-For each category in scope, write the specific contract it changes and the compatibility expectation. If the category is intentionally out of scope, record why.
-
-### 3. Outside-In Consumer Contract Pass
-
-For every added or materially changed element that has callers or consumers (including exported functions, composables, components, props, emits, slots, types, event payloads, config objects, routes, and shared constants), review outside-in before reading its implementation:
-
-1. Inspect only its consumer-visible name, signature, exported types, documentation, and directly affected call sites. Do not open the implementation body yet.
-2. Record the contract a reasonable caller would infer: purpose, inputs and outputs, ownership, side effects, error/nullability behavior, lifecycle or cleanup expectations, and any compatibility assumptions.
-3. Record where a caller must rely on hidden knowledge or where use feels awkward: surprising argument order or defaults, required call sequencing, implicit state, unclear return or error semantics, non-obvious cleanup, duplicated ceremony, or names that conceal the real responsibility.
-4. Only then read the implementation. Compare its actual contract with the consumer-first model and report mismatches, hidden obligations, and avoidable call-site friction. Do not dismiss a mismatch merely because the current implementation makes it work.
-
-Apply this pass to direct consumers first. Expand through the repository when the changed surface is shared, exported, persisted, or cross-package. You do not need to print the full record unless it produces a finding, but do not conclude that an API is reviewer-ready without performing this comparison.
-
-### 4. Set Review Depth
-
-Keep the review focused on the changed surface.
-
-- Start with changed files and directly affected call sites.
-- Expand to package-wide or repo-wide search only when the diff changes shared modules, exported types, component contracts, service/cache behavior, routing, global state, feature flags, or runtime lifecycle.
-- Treat docs-only changes, copy changes, and localized styling changes with a lighter pass unless they change documented contracts, reusable guidance, or shared UI behavior.
-- For large mechanical migrations, do not rely on spot-checking representative files. Define the old contract and new contract, then search for remaining old patterns, mixed contracts, un-migrated consumers, persisted-data compatibility gaps, and representative runtime entry points.
-- For policy, naming, documentation, or convention changes, review whether examples, names, ownership boundaries, and allowed exceptions consistently match the policy. The main risk is often ambiguous guidance rather than failing code.
-- Prefer a few concrete findings over a long list of speculative possibilities.
-
-### 5. Minimality Pass
-
-Look for code that exists because of fear rather than a proven responsibility:
-
-- Thin wrappers: any class, subclass, adapter, composable, helper, module registration, or event wrapper whose only behavior is forwarding to another API, setting one attribute/style, renaming an operation, or calling a single helper.
-- Guard helpers whose name adds less clarity than the inline condition.
-- Fallback listeners that duplicate library behavior.
-- State variables that are not used by rendering, computed values, or watchers.
-- Platform checks that can be replaced by event capability checks.
-- Comments that explain code that should be self-explanatory.
-
-Before deciding there are no findings, build a changed-responsibility ledger for every added or materially changed class, exported function, helper, listener, observer, module registration, state variable, and CSS selector:
-
-- Name / location
-- Call sites
-- Responsibility
-- Could this be local, inline, or deleted?
-- Does it expand scope beyond the user's request?
-- Decision: Keep / Inline / Remove / Rename
-- Reason
-
-Do not report "No findings" until this ledger has been evaluated. You do not need to print the full ledger unless it affects the answer, but you must use it.
-
-For each item, decide:
-
-- Keep: it owns a distinct responsibility, reduces repeated call-site complexity, isolates a real external contract, or is required by a framework extension point.
-- Inline: it is a thin wrapper with no additional semantic value.
-- Remove: it duplicates another code path or no longer has a caller.
-- Rename: it is correct but its name implies the wrong event, layer, or ownership.
-
-### 6. Codebase Convention And Reuse Pass
-
-Check whether the implementation fits the repository before judging it in isolation:
-
-- Search for nearby components, composables, utilities, tests, and package scripts that solve the same kind of problem.
-- Check existing naming, file structure, import style, state management, error handling, and cleanup patterns in the same package or feature area.
-- Inspect installed dependencies and existing wrappers before adding a dependency or writing custom low-level code.
-- Prefer the project's shared modules, design system components, composables, utilities, and wrappers over one-off local implementations.
-- If a library is already installed, confirm whether it is already used in the codebase and whether local usage patterns differ from upstream examples.
-- If the implementation intentionally diverges from local convention, record the reason and make sure the diff or PR body explains it.
-- If a new policy, guide, naming scheme, or structured key scheme is introduced, compare the changed call sites against that scheme instead of only checking whether code compiles. Flag names whose domain, ownership, or slot/role does not match their usage.
-
-Run a scope-escalation check: if the user's request names specific surfaces, but the diff changes shared modules, global registration, exported APIs, base components, or cross-package behavior, ask whether the same outcome can be achieved locally. Flag the broader change unless it is necessary and clearly justified by reuse or correctness.
-
-Run a dual-contract check whenever a migration adds a new field, key, helper, adapter, or config while keeping the old one:
-
-- Are both contracts still needed, or can the old one be removed?
-- If both remain, which callers own each contract and how long should both exist?
-- Do any callers mutate, serialize, compare, or display stale fields from the old contract?
-- Does the PR body or code make the transition plan clear enough for reviewers?
-
-Useful search patterns:
+Collect names and statistics first so the outside-in pass remains meaningful:
 
 ```bash
-rg -n "similarFunction|similarComponent|libraryName" packages
-rg -n "use[A-Z].*|create[A-Z].*|on[A-Z].*" packages/modules/src
-rg --files packages | rg "component-or-feature-name"
+# Local-layer inventory; these layers are not part of a branch/PR snapshot verdict.
+git status --short --untracked-files=all
+git diff --cached --name-status
+git diff --name-status
+git ls-files --others --exclude-standard
+
+# Branch/PR snapshot at resolved endpoints.
+git diff --name-status --find-renames <merge-base-sha> <head-sha>
+git diff --summary <merge-base-sha> <head-sha>
+
+# Combined tracked contents for workspace readiness only.
+git diff --name-status HEAD
+git diff --name-status <merge-base-sha>
 ```
 
-### 7. Responsibility And Naming Pass
+Use only the commands relevant to the target and repeat with `--stat` when useful. Prefer `git --no-pager` with `--no-ext-diff --no-textconv --no-color` for patch reads, and NUL-delimited output (`-z`) when processing path lists programmatically. `git diff HEAD` shows the final combined staged and unstaged tracked state; `git diff <merge-base-sha>` adds committed branch changes. Neither includes untracked files, and both read the worktree even if the single revision is pinned. Snapshot diffs require both resolved endpoints.
 
-Check that names match responsibility:
+Create a surface inventory with these layers:
 
-- `on*` functions should be event handlers for a specific event source.
-- `finish*`, `reset*`, `sync*`, and `schedule*` functions should be state commands, not event-specific names.
-- Avoid calling an event-specific function from unrelated fallback/cancel paths.
-- Avoid one function owning unrelated concerns such as gesture detection, animation state, and click suppression unless the file is already intentionally small.
+- committed branch or PR changes
+- staged changes
+- unstaged changes
+- untracked files, whose contents must be opened explicitly
+- deleted, renamed, case-only renamed, mode-changed, symlink, LFS, binary, submodule, generated, vendored, minified, and lock files
+- unrelated dirty files excluded from scope
 
-If a function is called by multiple event sources, prefer a neutral command name.
+Classify every changed path as `full review`, `semantic generated review`, `vendor/binary`, or `excluded`, with a reason. Recover truncated output with file-by-file or bounded reads; recheck the target and command result when output is unexpectedly empty. Do not silently skip difficult files. If included content remains unread, use an inconclusive verdict rather than claiming no findings.
 
-### 8. State, Flow, And Lifecycle Pass
+Track completion separately from classification: each included item ends as `reviewed` or `blocked` with a reason, never merely assigned or opened. Identify items by layer, status, and old/new path when needed; a staged deletion and untracked recreation of the same path are different items. Reconcile the final inventory against Git, including deletions and small companion files. Report completed/blocked counts and explicit exclusions; counts describe coverage, not correctness.
 
-For any change with meaningful runtime behavior, build a small flow table. Pick columns that match the work instead of forcing an interaction-specific template:
+For large, cross-cutting, delegated, or resumed reviews, read [references/review-orchestration.md](references/review-orchestration.md). It covers bounded review groups, cross-group integration, and safe reuse of earlier review evidence. Small reviews can keep the inventory inline.
 
-| Scenario | Entry Point | State/Data Changed | Cleanup/Exit | Failure Mode | User/Caller Impact |
-| --- | --- | --- | --- | --- | --- |
-| Happy path |  |  |  |  |  |
-| Empty/null/error input |  |  |  |  |  |
-| Repeated/rapid invocation |  |  |  |  |  |
-| Cancel/unmount/navigation/retry |  |  |  |  |  |
+### 3. Reconstruct Contracts and Consumers
 
-Then verify:
+Classify each changed responsibility as runtime behavior, public API/type, persisted or external data, shared surface, migration/mechanical change, dependency, test, or policy/documentation.
 
-- Every state, cache, subscription, timer, request, listener, lock, or optimistic update has a clear cleanup or rollback path.
-- Repeated invocation does not create duplicate listeners, duplicate requests, stale timers, double commits, or blocked next actions.
-- Error, empty, loading, cancellation, and unmount paths leave the system in a coherent state.
-- Data transformations preserve sign, units, ordering, identity, precision, and nullability assumptions.
-- UI interactions, async flows, service calls, and background side effects are intentionally included or excluded.
-- Library behavior is not duplicated unless local code covers a documented gap.
+Choose the highest applicable review tier:
 
-For any changed type, config object, event payload, serialized setting, cache key, or persisted shape:
+| Tier | Typical trigger | Required depth |
+| --- | --- | --- |
+| Fast | Copy, docs, localized style, fixture, import, or mechanical cleanup with no runtime/shared contract | Read all changed content, verify authority and scope, and run only targeted checks. |
+| Standard | Local runtime behavior, component contract, internal API, ordinary bug fix | Inspect direct consumers, relevant neighboring code, behavior scenarios, and test protection. |
+| Deep | Shared/exported API, persisted/external data, cross-package change, migration, dependency swap, auth/security, financial correctness, concurrency, or global lifecycle | Search all producers/consumers, map compatibility and migration, inspect full lifecycle, and activate every relevant risk module. |
 
-- Search for stored or external producers that may still emit the old shape, including localStorage/sessionStorage, server responses, fixtures, mocks, imported files, saved user settings, and versioned cache keys.
-- Verify old data is normalized, migrated, versioned, or safely ignored before new required fields are read.
-- Confirm fallback behavior does not silently display `undefined`, stale data, missing labels, wrong units, or mixed old/new representations.
-- If the change intentionally breaks old data, confirm the reset or migration trigger is explicit and tied to the domain key that changed.
+Escalate when tiers are mixed or uncertainty could hide meaningful impact. Tiers change analysis depth, never surface coverage.
 
-When using third-party composables, SDKs, APIs, or framework helpers, inspect their local installed implementation or primary docs for defaults, lifecycle, cleanup, cancellation, retry, and error behavior. Do not rely only on API names.
+Select risk modules by each responsibility's actual language, framework, runtime, and contract, then union them for related files. Record the applicable repository rule or contract when it affects a finding. Do not impose another project's language checklist or treat a filename extension as proof of framework semantics.
 
-### 9. Dependency And API Pass
+For every added or materially changed surface with consumers, perform an outside-in pass before reading its implementation body:
 
-For dependency swaps or new dependencies:
+1. Inspect its consumer-visible name, signature, exported types, documentation, and direct call sites. In files without separate declarations, reveal only the minimum region needed to understand the surface.
+2. Record what a reasonable caller would infer about purpose, ownership, inputs, outputs, side effects, errors/nullability, ordering, cleanup, and compatibility.
+3. Identify hidden knowledge or friction: surprising defaults, required sequencing, implicit state, unclear errors, non-obvious cleanup, or repeated caller ceremony.
+4. After forming that model, read the implementation and compare the inferred and actual contracts.
 
-- Confirm the codebase does not already provide a wrapper, composable, utility, or component for the same job.
-- Confirm default options match the old behavior.
-- Confirm event/value semantics match the old API, including sign, units, thresholds, and lifecycle timing.
-- Confirm cleanup behavior, cancellation behavior, and passive listener behavior.
-- Remove imports, types, helpers, and comments from the old implementation.
+Use a changed-responsibility ledger only for Deep reviews, responsibility moves, multi-consumer abstractions, stateful runtime changes, migrations, or low-confidence no-finding decisions. Record the element, consumers, responsibility, scope, and `Keep / Inline / Remove / Rename` decision. Do not force a ledger for trivial changes.
 
-Document non-obvious mappings in code comments only when the mapping is easy to break later.
+### 4. Review Correctness and Design
 
-### 10. PR Readiness Pass
+Read the complete diff for every included layer, the selected final state, every included untracked file, and enough surrounding code to follow changed call paths. Then evaluate these core questions:
 
-Compare code, PR body, inline comments, and tests:
+- **Behavior and compatibility:** Do happy, boundary, empty, null, error, repeated, and unsupported paths preserve the intended contract? Are old callers, producers, and stored values still compatible?
+- **State and lifecycle:** Do requests, watchers, subscriptions, timers, listeners, locks, optimistic updates, and cached state handle retry, cancellation, unmount, navigation, reconnection, and rapid key changes without stale or duplicate effects?
+- **Data correctness:** Are identity, ordering, sign, units, precision, rounding, nullability, serialization, and display-versus-domain values preserved?
+- **Ownership and scope:** Does each layer own the policy it implements? Is shared/global surface necessary, or would a local change satisfy the request with less blast radius?
+- **Minimality and reuse:** Does each abstraction remove real repeated complexity or isolate an external contract? Flag thin forwarding wrappers, duplicate fallbacks, dead state, stale imports/comments, and defensive branches only when the finding gate supports a concrete correction.
+- **Naming and readability:** Do names describe domain responsibility and event source accurately? Can the code be understood without comments that merely restate it?
+- **Repository fit:** Prefer authoritative repository rules and established shared primitives over frequency alone. A common legacy pattern is not automatically the desired convention.
 
-- PR body must describe the current implementation, not an older iteration.
-- Test checklist must only claim checks that actually ran.
-- Inline comments should help reviewers understand non-obvious decisions, not justify messy code.
-- Tags and feature flag notes should match the actual change.
-- If planning docs exist outside the repo, keep them out of Git changes unless explicitly requested.
-- If existing PR review comments are present, verify whether each unresolved thread is still valid on the current diff. Mention known unresolved blockers separately from newly found issues.
-- If the PR changes a documented convention or migration policy, ensure the body explains final intent and impact rather than listing intermediate naming attempts.
+For Standard or Deep stateful changes, trace at least the happy path, error/empty path, rapid repeated invocation, and cancellation/unmount/navigation/retry path. Use a small flow table internally when the paths are not obvious.
 
-Review new or changed tests as production code:
+Route to [references/conditional-review-risks.md](references/conditional-review-risks.md) only when a trigger appears:
 
-- Tests should validate behavior or owned contracts, not re-test a third-party library's basic behavior unless the local wrapper changes that behavior.
-- Avoid brittle source-code parsing, broad repository scans, or implementation-detail assertions unless they are the narrowest reliable way to protect a real contract.
-- Confirm test names and comments describe Given/When/Then behavior and do not claim coverage beyond what is asserted.
-- If a test is primarily a policy/enforcement test, verify the policy belongs in the repository and that the failure output is actionable for future authors.
+| Module | Trigger |
+| --- | --- |
+| Generated/external artifacts | Generated, vendored, lock, binary, LFS, or submodule changes |
+| Persisted data/migration | Storage, serialization, cache keys, external payloads, imports/exports, or old/new shapes |
+| Shared/cross-package | Exported or multi-consumer surface, global registration, base primitive, or shared config |
+| Security/privacy | Trust boundary, input/HTML, auth/permissions, URLs, cookies/storage, request building, logs/analytics, file transfer, secrets/PII, dependencies, or CI |
+| Financial/high-impact data | Money, price, order, payment, ranking, quota, permission, or irreversible operations |
+| Feature flags/rollout | Flagged, capability-gated, unsupported, reconnect, or staged-rollout behavior |
+| UI/layout/accessibility | Interactive UI, form, dialog, focus/keyboard, disabled/loading/error state, layout, or motion |
+| Performance/resources | Hot path, large collection, render/watch loop, polling/retry, network, bundle, timer, observer, or subscription |
+| Dependency/framework | Added, removed, upgraded, swapped, or newly used library/framework API |
+| Mechanical migration/policy | Broad rename/move/codemod, dual contract, convention, guide, or enforcement test |
 
-### 11. Reviewer Risk Patterns
+### 5. Evaluate Tests and Validation
 
-Check the current diff against recurring review feedback patterns from prior PRs and high-risk devil's advocate scenarios. Keep these as prompts for focused self-review, not as reasons to over-engineer.
+For every behavior or contract change:
 
-Repository convention, location, and ownership:
+1. Identify the test that protects it.
+2. Confirm that the test executes the changed path, asserts owned observable behavior, and would fail if the regression were present.
+3. If none exists, decide whether a stable automated regression test should be added based on impact, likelihood, and repository practice.
+4. When automation is impractical, specify the exact manual scenario and residual risk.
 
-- New files should live in the layer that owns the responsibility: app package for app-specific UI, `packages/modules` for shared behavior, and the appropriate `cache`, `local`, or `orchestration` service layer for composables.
-- Search for existing components, composables, utilities, wrappers, docs, and layout primitives before adding a new local implementation.
-- Avoid putting UI validation, save-flow policy, or view orchestration into raw cache composables.
-- If the implementation diverges from an existing pattern, make the reason obvious in code structure or PR explanation.
+Review changed tests as production code. Prefer black-box behavior and owned contracts over source parsing, broad scans, excessive mocking, or re-testing a third-party library. Follow repository-specific test naming and structure rules.
 
-Component API contract:
+Run the narrowest meaningful non-writing checks in review-only mode. Inspect real package scripts and configuration before choosing commands. Run targeted lint, type checks, and tests for Standard/Deep changes; broaden only when shared impact requires it. Do not run auto-fix formatters or any check that mutates the target worktree in review-only mode.
 
-- Confirm removed or changed `props`, `emits`, `slots`, `v-model`, event names, and type contracts have no stale call sites.
-- Disabled-looking UI must also be disabled in actual interaction semantics: click, keyboard focus, and button/input state.
-- Do not rely on `early return` alone when users can still focus or click a control that appears unavailable.
-- Documentation and examples must match real components and imports; copy-paste examples should not reference non-existent components.
+Run `vsc-tsc` only when preparing a PR for creation/update or when the user explicitly requests it. An ordinary review or general verification request does not authorize that command.
 
-State, lifecycle, and stale data:
+For a PR or branch snapshot, run validation against that snapshot in an isolated clean worktree when practical. If local overlays or unrelated dirty files can affect the result, report the contamination and do not attribute the outcome to the snapshot.
 
-- When a key input changes, old data should not remain visible or feed calculations under the new key.
-- `enabled`, unsupported-state, focus, ready, and reconnect paths should all honor the same side-effect guard.
-- Watchers should depend on the source that actually changes; avoid watching a derived boolean when same-category transitions need work.
-- Subscriptions, timers, listeners, requests, and cached state need cleanup or reset behavior for unmount, retry, reconnect, and repeated invocation.
+Do not initiate browser capture, device QA, or visual automation unless the user explicitly asks. List code-only UI verification as a manual QA residual risk.
 
-UI and layout code paths:
+For every command, report the exact command, tested SHA/state, and result. Classify failures as introduced by the target, reproduced on the base, flaky/environmental, or unknown because the baseline is unavailable. The presence or absence of a changed filename in output is supporting evidence, not proof of causality. Never claim a check or manual scenario that did not run.
 
-- For layout-affecting code, reason through first render, data changes, long/empty text, unsupported/disabled states, and desktop/mobile differences in code.
-- Prefer existing layout wrappers and shared UI primitives over ad hoc overflow, height, z-index, or scroll handling.
-- DOM measurement should run after a stable render point such as `nextTick` or `requestAnimationFrame`; do not treat arbitrary reactive waits as layout stability.
-- Do not start browser capture, device QA, or visual automation unless the user explicitly asks. If visual behavior cannot be verified from code, list it as a manual QA residual risk.
+### 6. Check PR Readiness and Report
 
-Minimality, dead code, and scope:
+Compare the final target diff with the PR title, body, comments, feature-flag notes, and validation checklist. Flag stale explanations and unsupported validation claims. Re-evaluate each known unresolved thread against the current diff and keep it separate from new findings.
 
-- Remove stale imports, listeners, cleanup, props, types, and comments left behind by contract changes.
-- Avoid exposing new options or flags when all callers should share one behavior.
-- Avoid helper functions, wrappers, or fallback paths whose only purpose is defensive uncertainty.
-- Keep docs and guides limited to decisions the codebase owns; do not document design-team-owned rules as engineering policy.
+Before reporting, perform a separate verification pass over candidate findings:
 
-Naming and copy clarity:
+1. Try to disprove each claim with caller guards, normalization, framework/library guarantees, other changed files, and base behavior. Preserve the exact scenario and supporting evidence when it survives; discard a refuted claim with a brief internal reason. Inability to verify is not disproof: route material unknowns to open questions or potential blockers.
+2. Verify the location independently of the claim. Match a short verbatim snippet to the exact reviewed file and snapshot, then read its numbered lines. Use the introducing change as the primary anchor and consumers as supporting evidence. Distinguish head/new-side lines from base/old-side deletion lines; do not invent a new-side location for removed code or select a similar snippet in another file. An uncertain anchor requires re-location, not dismissal of a supported issue.
+3. Reconcile inventory completion and recheck the selected input contents before declaring readiness. If refs or workspace contents changed, name the frozen snapshot being reported or review the affected changes and consumers again; never combine findings from different states into one current verdict.
 
-- Names should describe domain responsibility, not a nested implementation detail.
-- Event-specific names should not be reused for generic state commands or unrelated fallback paths.
-- UI copy should prefer direct state descriptions over indirect negative wording when possible.
-- Documentation should distinguish required patterns from allowed alternatives.
+Apply this finding gate:
 
-PR explanation and validation:
+- Every finding must be introduced or materially worsened by the target, anchored in a requirement/API/test/authoritative repository rule, and supported by concrete evidence and an actionable correction.
+- For P0-P2, trace a reachable changed path to an observable caller/user/data failure or violated behavioral contract.
+- For P3, show the specific maintenance, contract-clarity, or regression-protection gap created by the change and why it matters. A demonstrated runtime failure is not required; a generic preference or demand for more tests is insufficient.
+- Cite the narrowest verified file/line and side when needed, demonstrate the scenario or violated contract, and propose a correction and validation direction. If the primary location remains ambiguous, report the limitation without fabricating an inline comment.
+- Use `high` confidence for direct or reproducible evidence and `medium` for strong code-path evidence with a remaining runtime assumption.
+- Put low-confidence hypotheses under open questions or residual risks, not findings. Highlight a potentially catastrophic unknown as a potential blocker requiring verification.
+- Collapse duplicate symptoms into one root-cause finding.
+- Put P0-P2 in required findings, P3 in maintainability/test findings, and P4-P5 in suggestions. Include at most three suggestions by default, and omit taste-only nits.
 
-- The PR body should describe the final diff, not an earlier iteration.
-- Claimed validation must be limited to commands or manual checks actually performed.
-- When a behavior depends on a feature flag, unsupported state, or existing shared component behavior, call that out clearly.
+Use this severity guide:
 
-High-impact correctness:
+- `P0`: stop-ship exploit, outage, irreversible data loss/corruption, or financial harm with credible reachability.
+- `P1`: likely core user-flow regression or serious security/privacy/correctness failure.
+- `P2`: concrete edge-case, compatibility, state, lifecycle, or data issue with meaningful impact.
+- `P3`: maintainability, contract clarity, or missing-test issue likely to draw review feedback without a demonstrated behavior failure.
+- `P4`: small actionable simplification or clarity improvement.
+- `P5`: optional polish.
 
-- Prioritize anything that can cause outage, data corruption, incorrect orders, incorrect prices, incorrect rankings, or financial/monetary mistakes.
-- For market, payment, order, ranking, chart, or financial data, verify units, sign, ordering, rounding, precision, nullability, and whether display-formatted values leak into comparisons or API payloads.
-- Avoid floating-point assumptions for money-like values unless the existing domain code already treats the value that way.
-
-Cross-package blast radius:
-
-- If `packages/modules` changes, search desktop, mobile, alphachart, and guest app usage for affected imports, props, emits, types, and runtime assumptions.
-- Check whether a shared type or UI contract change needs coordinated updates across app packages.
-- If a change is intentionally app-specific, confirm it did not move into shared modules unnecessarily.
-- Treat every new export, global registration, base class override, or shared utility as API surface. Verify that each one has a real caller or a necessary framework role.
-- When shared constants or config objects gain new required fields, check every object construction path, stored copy, test fixture, mock response, and consumer that spreads or persists the object.
-- When a shared field is renamed or replaced, search for both the old and new fields and flag mixed contracts unless an explicit migration period is justified.
-
-Feature flags and rollout:
-
-- For feature-flagged behavior, verify default values, loading/ready state, OFF behavior, unsupported state, and fallback UI.
-- Do not assume the flag client is ready on first render.
-- Confirm watchers, reconnect paths, and cached state respect the same flag and availability guards as the main path.
-
-User state preservation:
-
-- Decide whether selection, input, filter, tab, scroll, expanded/collapsed state, and modal state should persist across navigation, stock changes, tab changes, reloads, and open/close cycles.
-- Do not reset user state unless the product behavior requires it.
-- If state should reset, make the reset trigger explicit and tied to the domain key that changed.
-
-API, cache, and async behavior:
-
-- For mutations or save flows, verify cache invalidation, optimistic updates, rollback, stale query behavior, and duplicate-submit protection.
-- Confirm query keys include every input that changes the result.
-- Ask what happens if an API is slow, fails, returns partial data, or returns after the user navigates away.
-- Check rapid repeated actions such as double-click, repeated submit, tab switching, and fast stock/user/account changes.
-
-Accessibility-lite interaction semantics:
-
-- Interactive elements should use correct semantic elements or established button/input components.
-- Disabled, readonly, selected, loading, and unavailable states should match keyboard focus, click behavior, aria/state attributes where local patterns use them, and visual styling.
-- Clickable `div` or `span` usage needs a concrete reason and should match existing local patterns.
-
-Error, empty, and unavailable states:
-
-- Check empty, error, loading, permission-denied, unsupported, no-data, and offline/slow-network states when the diff touches data-driven UI.
-- Avoid silent no-op interactions unless the UI clearly communicates why nothing happened.
-- Error messages should be actionable and should not expose implementation details.
-
-Performance and resource use:
-
-- Look for unnecessary recomputation, broad watchers, infinite watch loops, repeated network requests, duplicated subscriptions, and work repeated per render or per row.
-- For large lists, charts, order books, rankings, and tables, check whether sorting, mapping, filtering, formatting, and DOM work scale with realistic data sizes.
-- Confirm timers, listeners, observers, and subscriptions are cleaned up and not duplicated by repeated entry.
-
-Temporary/debug artifacts:
-
-- Remove console logs, temporary comments, TODOs without owner/date, mock values, debug styles, local-only feature toggles, and commented-out code.
-
-### 12. Validation Pass
-
-Run the narrowest checks that prove the changed surface or validate a finding:
-
-- Lint or format for changed files.
-- Type checks scoped or filtered to changed files when full checks are known to fail for unrelated reasons.
-- Unit tests or component tests when they exist for the changed area.
-- If `$hw.write-pr` will run the mandatory branch-diff lint/format gate later, do not duplicate broad formatting work here unless formatting affects a review finding or the user asks for it now.
-- Do not initiate browser capture, device QA, or visual automation unless the user explicitly asks. For UI behavior that needs eyes-on validation, record a manual QA residual risk instead.
-
-Validation must be evidence for behavior, not a replacement for review judgment. A test that only asserts an implementation detail can support a finding, but it does not by itself prove the implementation is minimal, scoped, or reviewer-ready.
-
-When a check fails because of existing unrelated errors, record both:
-
-- The exact command that failed.
-- Whether the changed file appears in the failure output.
-
-## Output Format
-
-Use this format when reporting to the user:
+Match the user's language and report in this shape, omitting empty optional sections:
 
 ```text
-PR review result:
+PR review result
 
-Findings:
-- [P2] Short title: concrete issue, file/line, why it matters, proposed fix.
-- [P3] Short title: concrete issue, file/line, why it matters, proposed fix.
-- [P4/P5] Include simplifications likely to generate reviewer feedback, even if not strictly blocking.
+Verdict: Ready | Ready with maintainability findings | Changes requested | Inconclusive
+
+Review scope:
+- Mode: review-only | fix
+- Target/base/head:
+- Local HEAD matches reviewed head:
+- Tier and activated modules:
+- Surface coverage by classification:
+- Completion: reviewed / included items; blocked items and reasons; exclusions:
+- Snapshot stability / changes during review:
+- Truncated/skipped/unrelated files:
+- PR/review/CI context:
+
+Required findings:
+- [P2][correctness][confidence: high] Title — path:line
+  Evidence/Scenario:
+  Impact:
+  Proposed fix:
+  Validation:
+
+Maintainability/test findings:
+- [P3][test][confidence: high] ...
+
+Known unresolved feedback:
+- ...
+
+Pre-existing issues:
+- ...
+
+Potential blockers requiring verification:
+- ...
+
+Suggestions:
+- [P4] ...
+
+Validation:
+- exact command at SHA/state: result
+
+Residual risks / open questions:
+- ...
 
 Changes made:
-- If edits were applied, summarize the finding that caused each edit and the resulting diff.
-
-Validation:
-- command: result
-- command: result
-
-Commit status:
-- Not committed. Waiting for approval.
+- None. Review-only mode.
 ```
 
-If there are no findings:
+Use `Changes requested` for P0-P2 or an unresolved blocker, `Ready with maintainability findings` for P3-only results, and `Ready` only when no confirmed findings remain and material validation is complete. Use `Inconclusive` when the target, surface, or critical evidence is incomplete.
 
-```text
-PR review result:
-
-No required code changes found.
-Optional findings: none.
-
-Residual risks:
-- Risk that could not be validated locally.
-
-Validation:
-- command: result
-```
-
-## Severity Guide
-
-- `P0`: outage, data corruption, security, financial correctness.
-- `P1`: likely user-facing regression or broken core behavior.
-- `P2`: edge-case regression, unclear state ownership, risky duplicated responsibility.
-- `P3`: readability debt likely to generate review feedback.
-- `P4`: small simplification or naming improvement.
-- `P5`: optional polish.
+When no required changes exist, say `Required findings: none.` If any included content remains unread, do not claim no confirmed findings. Do not declare the PR fully safe or ready when material checks, PR context, or runtime scenarios remain unavailable; describe those residual risks precisely.
