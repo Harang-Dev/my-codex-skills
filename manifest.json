@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "skills": {
     "doc": { "path": "skills/doc" },
     "explain-diff-html": { "path": "skills/explain-diff-html" },
@@ -8,6 +8,7 @@
     "hw-branch-interview": { "path": "skills/hw-branch-interview" },
     "hw-pr-review": { "path": "skills/hw-pr-review" },
     "hw-resolve-comment": { "path": "skills/hw-resolve-comment" },
+    "hw-screen-comments": { "path": "skills/hw-screen-comments" },
     "hw-seo": { "path": "skills/hw-seo" },
     "hw-work-log": { "path": "skills/hw-work-log" },
     "hw-write-pr": { "path": "skills/hw-write-pr" },
