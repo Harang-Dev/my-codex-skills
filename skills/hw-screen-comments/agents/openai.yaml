@@ -1,3 +1,3 @@
 interface:
-  display_name: "HW Screen Comments"
-  short_description: "Publish PR file comments with screenshots and user navigation"
+  display_name: "HW PR Screen Comments"
+  short_description: "Publish screenshot comments on changed screen components only"
