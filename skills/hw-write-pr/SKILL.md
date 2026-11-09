@@ -115,19 +115,22 @@ Resolve GitHub CLI before running any PR command:
 
 9. Pause for approval.
    - Show the exact PR title and body.
+   - Include `Harang-Dev` as the assignee in the approval preview.
    - State whether the next write will create a new PR or update an existing PR.
    - Include existing PR number and URL when present.
    - Do not run the final PR write until the user approves.
 
-10. Create or update after approval.
-   - Existing PR: use `"$GH_BIN" pr edit <number> --title <title> --body-file <file>`.
-   - New PR: use `"$GH_BIN" pr create --base <base> --head <branch> --title <title> --body-file <file>`.
+10. Create or update after approval and assign the PR to `Harang-Dev`.
+   - Existing PR: use `"$GH_BIN" pr edit <number> --title <title> --body-file <file> --add-assignee Harang-Dev`. Preserve any existing assignees.
+   - New PR: use `"$GH_BIN" pr create --base <base> --head <branch> --title <title> --body-file <file> --assignee Harang-Dev`.
    - Use a temporary body file when the PR body contains multiline Markdown.
-   - Re-run `"$GH_BIN" pr view --json number,url,title,body` after the write to verify the result.
+   - Re-run `"$GH_BIN" pr view --json number,url,title,body,assignees` after the write to verify the result, including that `Harang-Dev` is assigned.
+   - If the PR write succeeds but assignment fails or is missing, report the PR result and assignment failure separately; do not create a duplicate PR or claim assignment succeeded.
 
 11. Report concrete results.
    - Show branch name, final commit SHA, PR number, and PR URL.
    - Say explicitly whether the PR was created or updated.
+   - Report whether `Harang-Dev` was confirmed as an assignee.
 
 ## Existing PR Rule
 
