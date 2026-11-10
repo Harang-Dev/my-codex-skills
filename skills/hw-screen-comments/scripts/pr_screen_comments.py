@@ -2,6 +2,7 @@
 """Read PR evidence and publish one resumable file comment using gh (stdlib only)."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
 import json
@@ -63,16 +64,23 @@ def main():
 def snapshot(target):
     before = get_pr(target)
     root = endpoint(target)
-    files = api(target, root + "/files?per_page=100", paginate=True)
-    comments = api(target, root + "/comments?per_page=100", paginate=True)
-    issues = api(target, issue_endpoint(target), paginate=True)
-    reviews = api(target, root + "/reviews?per_page=100", paginate=True)
+    files, comments, issues, reviews = read_collections(target, [
+        root + "/files?per_page=100", root + "/comments?per_page=100",
+        issue_endpoint(target), root + "/reviews?per_page=100",
+    ])
     after = get_pr(target)
     if before != after:
         raise WorkflowError("pr_changed", "PR changed while reading. Inspect the new diff and take a fresh snapshot.")
     return {"schema": 1, "pr": after, "files": files,
             "files_complete": len(files) == after["changed_files"],
             "review_comments": comments, "issue_comments": issues, "reviews": reviews}
+
+
+def read_collections(target, routes):
+    """Read independent collections; pagination stays inside each request."""
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        pending = [executor.submit(api, target, route, paginate=True) for route in routes]
+        return [request.result() for request in pending]
 
 
 def publish(saved, target, path, body, state_dir):
@@ -87,10 +95,11 @@ def publish(saved, target, path, body, state_dir):
         raise WorkflowError("pr_changed", "PR changed. Recheck code, browser evidence, and snapshot before posting.")
     paths = {path, item.get("previous_filename", path)}
     keys = {file_key(target, name) for name in paths}
-    comments = api(target, endpoint(target) + "/comments?per_page=100", paginate=True)
+    comments, issues, reviews = read_collections(target, [
+        endpoint(target) + "/comments?per_page=100", issue_endpoint(target),
+        endpoint(target) + "/reviews?per_page=100",
+    ])
     existing = find_existing(comments, paths, keys, body)
-    issues = api(target, issue_endpoint(target), paginate=True)
-    reviews = api(target, endpoint(target) + "/reviews?per_page=100", paginate=True)
     discussion_changed = (file_context(comments, paths) != file_context(saved["review_comments"], paths)
                           or discussion_context(issues) != discussion_context(saved["issue_comments"])
                           or discussion_context(reviews) != discussion_context(saved["reviews"]))

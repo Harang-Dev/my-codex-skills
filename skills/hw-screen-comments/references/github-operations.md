@@ -14,7 +14,7 @@ python3 "$skill_dir/scripts/pr_screen_comments.py" snapshot \
   --output "$run_dir/snapshot.json"
 ```
 
-The helper uses only Python's standard library and authenticated `gh`. Its local publishing lock uses `fcntl` on macOS/Linux. `snapshot` is read-only. It saves the PR's base/head SHAs, files, review comments and replies, general comments, and review bodies across all pages. If PR state changes during the read, it stops for reassessment.
+The helper uses only Python's standard library and authenticated `gh`. Its local publishing lock uses `fcntl` on macOS/Linux. `snapshot` is read-only. It saves the PR's base/head SHAs, files, review comments and replies, general comments, and review bodies across all pages. Independent collection reads run with at most four workers, with pagination completed per collection. PR checks before and after the reads remain sequential; a read failure aborts the operation. If PR state changes during the read, it stops for reassessment.
 
 When `files_complete: false`, do not report complete coverage. Investigate GitHub's file-list limit or count mismatch and supplement missing paths using evidence such as a local diff for the same base/head. An absent API `patch` can indicate a binary file or large diff; it does not mean no change. Read `status` and `previous_filename` for deletions and renames. Process retrieved files first without inserting unsupported paths into the snapshot.
 
