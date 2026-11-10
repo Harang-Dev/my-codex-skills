@@ -11,10 +11,12 @@ import unittest
 
 SCRIPT = Path(__file__).with_name("pr_screen_comments.py")
 FAKE_GH = r'''
-import json, os, sys
+import fcntl, json, os, sys
 from pathlib import Path
 
 state_file = Path(os.environ["SCREEN_COMMENT_TEST_STATE"])
+lock = state_file.with_suffix(".lock").open("a")
+fcntl.flock(lock, fcntl.LOCK_EX)
 state = json.loads(state_file.read_text())
 args = sys.argv[1:]
 route = next(arg for arg in args if arg.startswith("repos/"))
@@ -49,6 +51,9 @@ else:
         state["pr"]["head"]["sha"] = "c" * 40
     result = state["pr"]
 state_file.write_text(json.dumps(state))
+fcntl.flock(lock, fcntl.LOCK_UN)
+if state.get("fail_route") == route:
+    sys.exit("Simulated read failure")
 if error:
     print(error, file=sys.stderr)
     sys.exit(1)
@@ -238,6 +243,21 @@ class CommentWorkflowTests(unittest.TestCase):
         self.update(pr=pr)
         self.snapshot()
         self.assertEqual(self.post()["status"], "created")
+
+    def test_failed_collection_blocks_snapshot_and_post(self):
+        self.snapshot()
+        self.update(fail_route="repos/example/project/pulls/7/reviews?per_page=100")
+        self.assertEqual(self.post(expected_code=2)["status"], "api_error")
+        self.assertEqual(self.state()["posts"], [])
+        self.snapshot_file.unlink()
+        self.assertEqual(self.snapshot(expected_code=2)["status"], "api_error")
+        self.assertFalse(self.snapshot_file.exists())
+
+    def test_head_change_during_post_checks_prevents_post(self):
+        self.snapshot()
+        self.update(change_on_read=4)
+        self.assertEqual(self.post(expected_code=2)["status"], "pr_changed")
+        self.assertEqual(self.state()["posts"], [])
 
     def test_unknown_file_never_posts(self):
         self.snapshot()
