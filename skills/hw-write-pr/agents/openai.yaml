@@ -1,4 +1,4 @@
 interface:
   display_name: "HW Write PR"
   short_description: "PR 작성시에 사용하는 스킬입니다."
-  default_prompt: "Use $hw-write-pr to prepare the current branch with git and GitHub CLI, run formatting and lint checks on the branch diff, generate a Korean PR draft from the repository template, show it for approval, and then create or update the PR."
+  default_prompt: "Use $hw-write-pr to validate the current branch, write the PR in Korean from the repository template, and create a GitHub Draft PR or update the existing PR."

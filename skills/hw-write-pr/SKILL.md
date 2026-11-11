@@ -1,13 +1,14 @@
 ---
 name: hw-write-pr
-description: Prepare, validate, draft, and publish or update a GitHub PR for the current branch using git and GitHub CLI. Always run repository-appropriate formatting and lint checks on the full branch diff before drafting, generate a Korean PR title/body from the repository PR template, show the draft for approval, then run the final PR create or update action.
+description: Prepare and validate the current branch, write a Korean PR title and body from the repository template, then create a GitHub Draft PR or update the existing PR without a separate approval step. Supports local title-and-body drafts on request.
 ---
 
 # HW Write PR
 
-Use this skill when the user wants Codex to run the PR workflow directly in the current repository: prepare the branch, commit in-scope pending work, run diff-scoped formatting and lint validation, generate a Korean PR draft, pause for approval, then create or update the PR with GitHub CLI.
+Use this skill when the user wants Codex to run the PR workflow directly in the current repository. Prepare the branch, run diff-scoped formatting and lint validation, write the Korean title and body, and create or update the PR with GitHub CLI in the same run.
 
-Do not stop at command suggestions unless the user explicitly asks for draft-only output.
+- Create new PRs as GitHub Drafts by default. Create a ready-for-review PR only when explicitly requested.
+- When the user asks for the title and body only, prepare them locally using non-writing checks. Skip fixes, staging, commits, pushes, and PR writes in this mode.
 
 ## Operating Model
 
@@ -22,7 +23,6 @@ This workflow uses only standard git and GitHub CLI.
 - Treat reruns as normal. Detect existing PRs before deciding whether to create or update.
 - Do not silently discard, reset, or overwrite local changes.
 - If uncommitted changes are mixed or unrelated to the requested PR, stop and ask which files belong in scope.
-- Always show the exact title and body draft before the final PR create/update write.
 - Git writes must be serial: stage, commit, push, and PR writes one at a time.
 - Before drafting the PR, run formatting and lint checks against the full branch diff and include any resulting fixes in the PR.
 
@@ -56,13 +56,14 @@ Resolve GitHub CLI before running any PR command:
 
 2. Validate tools.
    - Check `git --version`.
+   - For a local title-and-body draft, skip GitHub authentication and PR discovery unless existing PR context is needed.
    - Resolve GitHub CLI as `GH_BIN` using the Tool Path Resolution section.
    - Check `"$GH_BIN" --version`.
    - Check `"$GH_BIN" auth status`.
    - If `GH_BIN` cannot be resolved or is unauthenticated, stop before PR writes and explain the required installation or authentication step.
 
 3. Detect PR mode before publishing.
-   - Prefer `"$GH_BIN" pr view --json number,url,state,headRefName,baseRefName,title,body`.
+   - Prefer `"$GH_BIN" pr view --json number,url,state,headRefName,baseRefName,title,body,isDraft`.
    - If an open PR exists for the branch, the workflow is an update, not a create.
    - If no PR exists, the workflow is a create.
 
@@ -74,6 +75,7 @@ Resolve GitHub CLI before running any PR command:
 
 5. Run the diff formatting and lint gate.
    - This step is mandatory before PR draft generation.
+   - For a local title-and-body draft, run available read-only checks and report their results in the draft.
    - Identify changed files from the full branch diff with `git diff --name-only <base>...HEAD`, plus any uncommitted in-scope files from `git status --short`.
    - Inspect the repository's actual scripts and config before choosing commands:
      - package manager lockfiles and `package.json` scripts
@@ -112,29 +114,24 @@ Resolve GitHub CLI before running any PR command:
    - Use user-provided docs/specs first. Otherwise derive 내용 from `git diff <base>...HEAD`, `git diff --stat <base>...HEAD`, and relevant changed files.
    - Mention validation actually performed. Do not claim tests that were not run.
    - Leave template sections blank only when the section requires information that cannot be inferred.
+   - If the user requested a local title-and-body draft, return it here.
 
-9. Pause for approval.
-   - Show the exact PR title and body.
-   - Include `Harang-Dev` as the assignee in the approval preview.
-   - State whether the next write will create a new PR or update an existing PR.
-   - Include existing PR number and URL when present.
-   - Do not run the final PR write until the user approves.
-
-10. Create or update after approval and assign the PR to `Harang-Dev`.
-   - Existing PR: use `"$GH_BIN" pr edit <number> --title <title> --body-file <file> --add-assignee Harang-Dev`. Preserve any existing assignees.
-   - New PR: use `"$GH_BIN" pr create --base <base> --head <branch> --title <title> --body-file <file> --assignee Harang-Dev`.
+9. Create or update the PR without a separate approval step and assign it to `Harang-Dev`.
+   - Existing PR: use `"$GH_BIN" pr edit <number> --title <title> --body-file <file> --add-assignee Harang-Dev`. Preserve existing assignees and the current Draft or ready-for-review status unless the user requests a status change.
+   - For an explicitly requested status change on an existing PR, use `"$GH_BIN" pr ready <number>` to mark it ready or add `--undo` to convert it to Draft.
+   - New PR: use `"$GH_BIN" pr create --draft --base <base> --head <branch> --title <title> --body-file <file> --assignee Harang-Dev`. Omit `--draft` for an explicit ready-for-review request.
    - Use a temporary body file when the PR body contains multiline Markdown.
-   - Re-run `"$GH_BIN" pr view --json number,url,title,body,assignees` after the write to verify the result, including that `Harang-Dev` is assigned.
+   - Re-run `"$GH_BIN" pr view <number-or-url> --json number,url,title,body,assignees,isDraft` after the write to verify the result, including the Draft status and `Harang-Dev` assignment.
    - If the PR write succeeds but assignment fails or is missing, report the PR result and assignment failure separately; do not create a duplicate PR or claim assignment succeeded.
 
-11. Report concrete results.
+10. Report concrete results.
    - Show branch name, final commit SHA, PR number, and PR URL.
-   - Say explicitly whether the PR was created or updated.
+   - Say whether the PR was created or updated and report its verified Draft or ready-for-review status.
    - Report whether `Harang-Dev` was confirmed as an assignee.
 
 ## Existing PR Rule
 
-If the current branch already has an open PR, do not frame the task as creating a new PR. Refresh branch state, regenerate the PR draft, then update the existing PR after approval.
+If the current branch already has an open PR, refresh branch state, regenerate the title and body, and update that PR.
 
 This avoids duplicate PRs and avoids late failures after a PR already exists.
 
@@ -159,4 +156,3 @@ Stop at the earliest safe point and classify the blocker clearly:
 - mixed uncommitted changes with unclear scope
 - unresolved merge/rebase conflict
 - no reliable base branch
-- user approval required before final PR write
