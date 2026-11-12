@@ -7,7 +7,7 @@ description: Perform an evidence-first, read-only PR-readiness review of local w
 
 ## Goal
 
-Find concrete issues that a careful human reviewer would want fixed before approval. Review behavior and contracts, not just lint and tests. Prefer a small set of well-supported findings over a long speculative checklist.
+Find concrete issues that a careful human reviewer would want fixed before approval. Assess whether the implementation is necessary and fits the repository as well as whether its behavior and contracts are correct. Prefer a small set of well-supported findings over a long speculative checklist.
 
 ## Operating Contract
 
@@ -91,9 +91,9 @@ Track completion separately from classification: each included item ends as `rev
 
 For large, cross-cutting, delegated, or resumed reviews, read [references/review-orchestration.md](references/review-orchestration.md). It covers bounded review groups, cross-group integration, and safe reuse of earlier review evidence. Small reviews can keep the inventory inline.
 
-### 3. Reconstruct Contracts and Consumers
+### 3. Assess Necessity, Contracts, and Consumers
 
-Classify each changed responsibility as runtime behavior, public API/type, persisted or external data, shared surface, migration/mechanical change, dependency, test, or policy/documentation.
+Start by asking whether the final requirements could be fulfilled with a smaller change to the existing code. Establish the basis for each added responsibility: requested behavior/design, existing behavior to preserve, or a concrete regression caused by the change. Treat the implementation as a proposal to evaluate, not as the assumed solution. Classify the responsibilities as runtime behavior, public API/type, persisted or external data, shared surface, migration/mechanical change, dependency, test, or policy/documentation.
 
 Choose the highest applicable review tier:
 
@@ -120,13 +120,13 @@ Use a changed-responsibility ledger only for Deep reviews, responsibility moves,
 
 Read the complete diff for every included layer, the selected final state, every included untracked file, and enough surrounding code to follow changed call paths. Then evaluate these core questions:
 
+- **Necessity and scope:** Which requirement, preserved behavior, or concrete regression justifies each added responsibility? Identify a smaller alternative when one preserves the full contract. Check targeted fixes and moves for unrelated renaming, restructuring, reordering, or formatting; do not demand the fewest lines at the expense of required behavior.
+- **Repository fit:** Prefer authoritative repository rules and shared primitives. Compare implementations with the same responsibility, execution triggers, state ownership, and lifecycle, tracing callers and cache updates where relevant. Usage elsewhere, frequency, or a common library alone does not establish suitability; a legacy pattern is not automatically the desired convention.
+- **Ownership and complexity:** Does each layer own the policy it implements, and could a local change avoid widening shared/global scope? Does an abstraction provide concrete reuse or a required contract? If synchronization state, watchers, cancellation flags, or guards compensate for the chosen structure, examine whether responsibility placement or execution order can remove that complexity while preserving necessary protection. Report redundant forwarding, fallbacks, state, and stale imports/comments only when a concrete simplification is supported.
 - **Behavior and compatibility:** Do happy, boundary, empty, null, error, repeated, and unsupported paths preserve the intended contract? Are old callers, producers, and stored values still compatible?
 - **State and lifecycle:** Do requests, watchers, subscriptions, timers, listeners, locks, optimistic updates, and cached state handle retry, cancellation, unmount, navigation, reconnection, and rapid key changes without stale or duplicate effects?
 - **Data correctness:** Are identity, ordering, sign, units, precision, rounding, nullability, serialization, and display-versus-domain values preserved?
-- **Ownership and scope:** Does each layer own the policy it implements? Is shared/global surface necessary, or would a local change satisfy the request with less blast radius?
-- **Minimality and reuse:** Does each abstraction remove real repeated complexity or isolate an external contract? Flag thin forwarding wrappers, duplicate fallbacks, dead state, stale imports/comments, and defensive branches only when the finding gate supports a concrete correction.
 - **Naming and readability:** Do names describe domain responsibility and event source accurately? Can the code be understood without comments that merely restate it?
-- **Repository fit:** Prefer authoritative repository rules and established shared primitives over frequency alone. A common legacy pattern is not automatically the desired convention.
 
 For Standard or Deep stateful changes, trace at least the happy path, error/empty path, rapid repeated invocation, and cancellation/unmount/navigation/retry path. Use a small flow table internally when the paths are not obvious.
 
@@ -180,7 +180,7 @@ Apply this finding gate:
 
 - Every finding must be introduced or materially worsened by the target, anchored in a requirement/API/test/authoritative repository rule, and supported by concrete evidence and an actionable correction.
 - For P0-P2, trace a reachable changed path to an observable caller/user/data failure or violated behavioral contract.
-- For P3, show the specific maintenance, contract-clarity, or regression-protection gap created by the change and why it matters. A demonstrated runtime failure is not required; a generic preference or demand for more tests is insufficient.
+- For P3, show the specific maintenance, contract-clarity, or regression-protection gap created by the change and why it matters. For unnecessary complexity, identify what can be removed or simplified and how the required behavior remains covered. A demonstrated runtime failure is not required; a generic preference or demand for more tests is insufficient.
 - Cite the narrowest verified file/line and side when needed, demonstrate the scenario or violated contract, and propose a correction and validation direction. If the primary location remains ambiguous, report the limitation without fabricating an inline comment.
 - Use `high` confidence for direct or reproducible evidence and `medium` for strong code-path evidence with a remaining runtime assumption.
 - Put low-confidence hypotheses under open questions or residual risks, not findings. Highlight a potentially catastrophic unknown as a potential blocker requiring verification.

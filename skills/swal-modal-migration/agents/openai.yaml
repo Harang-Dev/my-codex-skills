@@ -1,4 +1,4 @@
 interface:
-  display_name: "Swal Modal Migration"
+  display_name: "Swal 모달 대체"
   short_description: "SweetAlert 호출을 Warp 모달로 안전하게 전환"
   default_prompt: "Use $swal-modal-migration to replace swalConfirm, swalAlert, or swalPrompt calls in the provided Vue files."
