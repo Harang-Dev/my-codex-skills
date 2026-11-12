@@ -1,4 +1,4 @@
 interface:
-  display_name: "HW PR Review"
+  display_name: "PR 리뷰"
   short_description: "Evidence-first, read-only PR readiness review"
   default_prompt: "Use $hw-pr-review to perform a read-only, evidence-first review of the current diff, branch, or PR and report findings, validation, and residual risks."

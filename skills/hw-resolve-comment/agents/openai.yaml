@@ -1,4 +1,4 @@
 interface:
-  display_name: "HW Resolve Comment"
+  display_name: "리뷰 코멘트 처리"
   short_description: "리뷰 코멘트를 하나씩 처리하고 커밋합니다."
   default_prompt: "Use $hw-resolve-comment to resolve PR review comments one at a time, show each fix for confirmation, commit it, then draft final replies with commit links."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR 셀프리뷰"
+  short_description: "PR에서 설명이 필요한 코드 줄에 쉬운 말로 변경 이유 남기기"
+  default_prompt: "$hw-pr-self-review로 현재 PR의 설명이 필요한 줄에 쉬운 말로 셀프리뷰를 남겨줘."
